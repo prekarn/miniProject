@@ -9,6 +9,7 @@ import Navbar from "./components/Navebar";
 import Login from "./pages/Login";
 import Home from "./pages/Home";
 import Employee from "./pages/Employee";
+import Product from "./pages/Product";
 
 function App() {
   const [user, setUser] = useState(() => {
@@ -50,6 +51,10 @@ function App() {
           <Route
             path="/employee"
             element={user ? <Employee /> : <Navigate to="/login" />}
+          />
+          <Route
+            path="/product"
+            element={user ? <Product /> : <Navigate to="/login" />}
           />
           <Route
             path="*"

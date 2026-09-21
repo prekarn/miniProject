@@ -3,8 +3,13 @@ const mongoose = require("mongoose");
 const cors = require("cors");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
+const path = require("path");
+const multer = require("multer");
+const fs = require("fs");
+
 require("dotenv").config();
 
+const Product = require("./models/Product"); // นำเข้า Product Model
 const Employee = require("./models/Employee");
 
 const app = express();
@@ -69,6 +74,7 @@ app.post("/api/employees", async (req, res) => {
       empPassword: hashedPassword,
       permission: permission || "0000",
     });
+    console.log("Emp Data:", newEmp);
 
     await newEmp.save();
     res
@@ -172,6 +178,132 @@ app.delete("/api/employees/:id", async (req, res) => {
     res
       .status(500)
       .json({ message: "เกิดข้อผิดพลาดในการลบข้อมูล", error: err.message });
+  }
+});
+
+//===================== Product ====================//
+// 1. ตั้งค่า static folder ให้ฝั่ง React เรียกดูไฟล์รูปภาพที่อัปโหลดได้
+app.use("/uploads", express.static(path.join(__dirname, "uploads")));
+
+// 2. ตั้งค่า Multer สำหรับ Save ไฟล์รูปภาพลงโฟลเดอร์ uploads
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const dir = "./uploads";
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir); // สร้างโฟลเดอร์ถ้ายังไม่มี
+    }
+    cb(null, dir);
+  },
+  filename: (req, file, cb) => {
+    // ตั้งชื่อไฟล์ป้องกันซ้ำโดยใช้ Timestamp
+    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
+    cb(null, uniqueSuffix + path.extname(file.originalname));
+  },
+});
+
+const upload = multer({ storage });
+
+// ================= PRODUCT APIs ================= //
+
+// 1. READ ALL PRODUCTS
+app.get("/api/products", async (req, res) => {
+  try {
+    const products = await Product.find().sort({ createdAt: -1 });
+    res.json(products);
+  } catch (err) {
+    res
+      .status(500)
+      .json({
+        message: "เกิดข้อผิดพลาดในการดึงข้อมูลสินค้า",
+        error: err.message,
+      });
+  }
+});
+
+// 2. CREATE PRODUCT (พร้อม Auto proId และ Upload รูป)
+app.post("/api/products", upload.single("img"), async (req, res) => {
+  try {
+    const { proName, detail, price } = req.body;
+
+    // Logic รัน Auto proId (เช่น Pro001, Pro002)
+    const lastProduct = await Product.findOne({
+      proId: { $regex: /^Pro\d+$/ },
+    }).sort({ createdAt: -1 });
+    let nextNum = 1;
+    if (lastProduct && lastProduct.proId) {
+      const currentNum = parseInt(lastProduct.proId.replace("Pro", ""), 10);
+      if (!isNaN(currentNum)) nextNum = currentNum + 1;
+    }
+    const generatedProId = `Pro${String(nextNum).padStart(3, "0")}`;
+
+    // ชื่อไฟล์รูปถ้ามีการอัปโหลด
+    const imgFilename = req.file ? req.file.filename : "";
+
+    const newProduct = new Product({
+      proId: generatedProId,
+      proName,
+      detail,
+      price: Number(price),
+      img: imgFilename,
+    });
+
+    await newProduct.save();
+    res.status(201).json({ message: "เพิ่มสินค้าสำเร็จ", data: newProduct });
+  } catch (err) {
+    console.error("Create Product Error:", err);
+    res
+      .status(500)
+      .json({ message: "เกิดข้อผิดพลาดในการเพิ่มสินค้า", error: err.message });
+  }
+});
+
+// 3. UPDATE PRODUCT (แก้ไขข้อมูล/เปลี่ยนรูป)
+app.put("/api/products/:id", upload.single("img"), async (req, res) => {
+  try {
+    const { proName, detail, price } = req.body;
+    let updateData = { proName, detail, price: Number(price) };
+
+    // ถ้ามีการเลือกรูปใหม่ ให้เปลี่ยนชื่อรูป และลบรูปเก่าออก
+    if (req.file) {
+      updateData.img = req.file.filename;
+
+      const oldProduct = await Product.findById(req.params.id);
+      if (oldProduct && oldProduct.img) {
+        const oldImagePath = path.join(__dirname, "uploads", oldProduct.img);
+        if (fs.existsSync(oldImagePath)) {
+          fs.unlinkSync(oldImagePath); // ลบรูปเก่า
+        }
+      }
+    }
+
+    const updatedProduct = await Product.findByIdAndUpdate(
+      req.params.id,
+      updateData,
+      { new: true },
+    );
+    res.json({ message: "อัปเดตข้อมูลสินค้าสำเร็จ", data: updatedProduct });
+  } catch (err) {
+    res
+      .status(500)
+      .json({ message: "เกิดข้อผิดพลาดในการอัปเดตสินค้า", error: err.message });
+  }
+});
+
+// 4. DELETE PRODUCT (ลบสินค้าพร้อมรูป)
+app.delete("/api/products/:id", async (req, res) => {
+  try {
+    const product = await Product.findByIdAndDelete(req.params.id);
+    if (product && product.img) {
+      const imagePath = path.join(__dirname, "uploads", product.img);
+      if (fs.existsSync(imagePath)) {
+        fs.unlinkSync(imagePath); // ลบไฟล์รูปในเซิร์ฟเวอร์ด้วย
+      }
+    }
+    res.json({ message: "ลบสินค้าสำเร็จ" });
+  } catch (err) {
+    res
+      .status(500)
+      .json({ message: "เกิดข้อผิดพลาดในการลบสินค้า", error: err.message });
   }
 });
 

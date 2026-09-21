@@ -56,7 +56,7 @@ const Navbar = ({ user, onLogout }) => {
             )}
             {canAccessProduct && (
               <li className="nav-item">
-                <Link className="nav-link" to="#">
+                <Link className="nav-link" to="/product">
                   Product
                 </Link>
               </li>
