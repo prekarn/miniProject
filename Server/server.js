@@ -13,7 +13,14 @@ const Product = require("./models/Product"); // นำเข้า Product Model
 const Employee = require("./models/Employee");
 
 const app = express();
-app.use(cors());
+//app.use(cors());
+app.use(
+  cors({
+    origin: process.env.CLIENT_URL || "*",
+    credentials: true,
+  }),
+);
+
 app.use(express.json());
 
 // เชื่อมต่อ MongoDB
@@ -211,12 +218,10 @@ app.get("/api/products", async (req, res) => {
     const products = await Product.find().sort({ createdAt: -1 });
     res.json(products);
   } catch (err) {
-    res
-      .status(500)
-      .json({
-        message: "เกิดข้อผิดพลาดในการดึงข้อมูลสินค้า",
-        error: err.message,
-      });
+    res.status(500).json({
+      message: "เกิดข้อผิดพลาดในการดึงข้อมูลสินค้า",
+      error: err.message,
+    });
   }
 });
 
